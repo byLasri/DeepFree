@@ -29,6 +29,8 @@ class VerificationResult:
     FAILED = "FAILED"
     BLOCKED_BY_DYNAMIC_PROTECTION = "BLOCKED_BY_DYNAMIC_PROTECTION"
     INCONCLUSIVE = "INCONCLUSIVE"
+    EXPIRED = "EXPIRED"
+    INVALID = "INVALID"
 
     def __init__(
         self,
@@ -99,48 +101,67 @@ class AuthVerifier:
         return data
 
     def _build_headers(self, auth_data: Dict[str, Any]) -> Dict[str, str]:
-        """Build HTTP headers from auth state."""
+        """Build HTTP headers from auth state using captured browser fingerprint."""
         token = auth_data["authorization"]["token"]
-        cookies = auth_data.get("cookies", [])
+        fingerprint = auth_data.get("browser_fingerprint", {})
+        client_info = auth_data.get("client", {})
+
+        # Use captured User-Agent, fallback to a reasonable default matching the detected browser
+        detected_browser = client_info.get("browser", "chrome")
+        if detected_browser == "msedge":
+            default_ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0"
+        else:
+            default_ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
         headers = {
             "Authorization": f"Bearer {token}",
-            "Accept": "*/*",
+            "Accept": "application/json, text/plain, */*",
             "Accept-Language": "en-US,en;q=0.9",
             "Content-Type": "application/json",
-            "Origin": "https://chat.deepseek.com",
-            "Referer": "https://chat.deepseek.com/",
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:155.0) Gecko/20100101 Firefox/155.0",
+            "Origin": fingerprint.get("origin", "https://chat.deepseek.com"),
+            "Referer": fingerprint.get("referer", "https://chat.deepseek.com/"),
+            # CRITICAL: Use the EXACT User-Agent captured from the browser
+            "User-Agent": fingerprint.get("user_agent", default_ua),
             "x-client-bundle-id": "com.deepseek.chat",
             "x-client-locale": "en_US",
             "x-client-platform": "web",
             "x-client-version": "2.4.0",
             "x-client-timezone-offset": "-25200",
+            # Add Sec-Fetch headers to bypass Cloudflare WAF
+            "Sec-Fetch-Dest": "empty",
+            "Sec-Fetch-Mode": "cors",
+            "Sec-Fetch-Site": "same-origin",
         }
 
-        # Build Cookie header
-        cookie_parts = []
-        for cookie in auth_data.get("cookies", []):
-            if cookie.get("value"):
-                cookie_parts.append(f"{cookie['name']}={cookie['value']}")
+        # Add Sec-CH-UA headers if captured
+        if "sec_ch_ua" in fingerprint and fingerprint["sec_ch_ua"]:
+            headers["Sec-CH-UA"] = fingerprint["sec_ch_ua"]
+        if "sec_ch_ua_platform" in fingerprint and fingerprint["sec_ch_ua_platform"]:
+            headers["Sec-CH-UA-Platform"] = fingerprint["sec_ch_ua_platform"]
 
+        # Build Cookie header
+        cookie_parts = [f"{c['name']}={c['value']}" for c in auth_data.get("cookies", []) if c.get("value")]
         if cookie_parts:
             headers["Cookie"] = "; ".join(cookie_parts)
 
         return headers
 
     def _classify_response(self, response: httpx.Response) -> tuple:
-        """Classify the HTTP response."""
+        """Classify the HTTP response with proper lifecycle states."""
         status = response.status_code
         text = response.text[:2000] if response.text else ""
+        text_lower = text.lower()
 
-        # Check for explicit authentication failure
+        # Check for explicit authentication failure (401)
         if status == 401:
             return (VerificationResult.FAILED, True, "Explicit authentication failure (401)")
 
-        # Check for dynamic protection errors
+        # Check for token expiration (DeepSeek returns 400 with specific error)
+        if status == 400 and ("invalid token" in text_lower or "token expired" in text_lower or "40003" in text_lower):
+            return (VerificationResult.EXPIRED, True, "Token expired or invalid. Please run 'deepfree login' again.")
+
+        # Check for dynamic protection errors (PoW, hif-leim)
         if status == 403:
-            text_lower = text.lower()
             if any(keyword in text_lower for keyword in [
                 "invalid_pow", "missing_pow", "pow", "40301",
                 "missing header", "40300",
@@ -152,9 +173,11 @@ class AuthVerifier:
         if status == 200:
             return (VerificationResult.VERIFIED, False, "Success")
 
-        # Other 4xx/5xx
+        # Other 4xx - likely invalid auth state
         if 400 <= status < 500:
-            return (VerificationResult.INCONCLUSIVE, False, f"Client error ({status})")
+            return (VerificationResult.INVALID, False, f"Client error ({status})")
+
+        # Server errors
         if 500 <= status < 600:
             return (VerificationResult.INCONCLUSIVE, False, f"Server error ({status})")
 
@@ -213,10 +236,7 @@ class AuthVerifier:
                 }
 
                 return VerificationResult(
-                    status=VerificationResult.VERIFIED if response.status_code == 200 else
-                           VerificationResult.FAILED if response.status_code == 401 else
-                           VerificationResult.BLOCKED_BY_DYNAMIC_PROTECTION if response.status_code == 403 and ("pow" in response.text.lower() or "hif" in response.text.lower()) else
-                           VerificationResult.INCONCLUSIVE,
+                    status=status,
                     http_status=response.status_code,
                     response_body=response.text,
                     metadata=metadata,
@@ -273,6 +293,24 @@ def _print_result(result: VerificationResult, metadata: Dict[str, Any]):
         print(f"HTTP status: {result.http_status}")
         print()
         print("Persisted authentication works independently of the browser.")
+
+    elif result.status == "EXPIRED":
+        print("AUTHENTICATION EXPIRED")
+        print("=" * 40)
+        print()
+        print(f"HTTP status: {result.http_status}")
+        print(f"Reason: {result.error or 'Token expired'}")
+        print()
+        print("Run 'deepfree login' to re-authenticate.")
+
+    elif result.status == "INVALID":
+        print("AUTHENTICATION INVALID")
+        print("=" * 40)
+        print()
+        print(f"HTTP status: {result.http_status}")
+        print(f"Reason: {result.metadata.get('reason', 'Invalid auth state')}")
+        print()
+        print("Run 'deepfree login' to re-authenticate.")
 
     elif result.status == "BLOCKED_BY_DYNAMIC_PROTECTION":
         print("AUTHENTICATION NOT DISPROVEN")
@@ -336,7 +374,7 @@ def main():
     # Exit code based on result
     if result.status == "VERIFIED":
         sys.exit(0)
-    elif result.status == "FAILED":
+    elif result.status in ("FAILED", "EXPIRED", "INVALID"):
         sys.exit(1)
     else:
         sys.exit(2)

@@ -274,7 +274,6 @@ def cmd_login(args):
     import asyncio
     result = asyncio.run(run_login_extractor(
         headless=args.headless,
-        use_persistent_profile=args.persistent_profile,
         timeout=args.timeout,
     ))
 
@@ -297,14 +296,13 @@ def cmd_verify(args):
         timeout=args.timeout,
     ))
 
-    from src.auth.verify_auth import VerificationResult
-    # Import the print function
     from src.auth.verify_auth import _print_result
     _print_result(result, metadata)
 
+    # Exit codes: 0=verified, 1=failed/expired/invalid, 2=inconclusive/blocked
     if result.status == "VERIFIED":
         return 0
-    elif result.status == "FAILED":
+    elif result.status in ("FAILED", "EXPIRED", "INVALID"):
         return 1
     else:
         return 2
@@ -323,7 +321,7 @@ def cmd_auth_status(args):
         auth_file = Path(auth_file)
 
     if not auth_file.exists():
-        print("Authentication state: NOT FOUND")
+        print("Authentication state: NOT_CONFIGURED")
         print(f"Expected location: {auth_file}")
         return 1
 
@@ -340,16 +338,18 @@ def cmd_auth_status(args):
         print(f"  Cookies: {len(cookies)} captured")
         if cookies:
             print(f"  Cookie names: {', '.join(c['name'] for c in cookies)}")
+        
+        # Show client info
+        client_info = data.get('client', {})
+        if client_info:
+            print(f"  Browser: {client_info.get('browser', 'unknown')}")
 
-        # Check if storage state is present
-        if 'storage_state' in data:
-            storage = data['storage_state']
-            if storage.get('origins'):
-                print(f"  Storage state: PRESENT ({len(storage['origins'])} origins)")
-            else:
-                print("  Storage state: EMPTY")
-        else:
-            print("  Storage state: NOT CAPTURED")
+        # Check if browser_fingerprint is present
+        if 'browser_fingerprint' in data:
+            fp = data['browser_fingerprint']
+            print(f"  Browser fingerprint: CAPTURED")
+            if fp.get('user_agent'):
+                print(f"    User-Agent: {fp['user_agent'][:80]}...")
 
         return 0
     except Exception as e:
@@ -440,7 +440,6 @@ def main():
 
     p8 = subparsers.add_parser("login", help="Run browser-based OAuth login extractor")
     p8.add_argument("--headless", action="store_true", help="Run browser in headless mode (not recommended for login)")
-    p8.add_argument("--persistent-profile", action="store_true", help="Use real Chrome profile (requires all Chrome windows closed)")
     p8.add_argument("--timeout", type=int, default=300, help="Timeout in seconds")
     p8.set_defaults(func=cmd_login)
 

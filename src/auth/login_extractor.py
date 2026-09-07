@@ -17,7 +17,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional, Dict, Any
 
-from playwright.async_api import async_playwright, Browser, BrowserContext, Page
+from playwright.async_api import async_playwright, Browser, BrowserContext, Page, Response
 
 from ..session import AuthState
 
@@ -26,22 +26,18 @@ def get_playwright_launch_config() -> dict:
     """
     Detect system default browser and return appropriate Playwright launch configuration.
     Prioritizes system-installed Chromium-based browsers (Edge, Chrome, Brave) over Playwright's bundled Chromium.
+    HARDENED: Minimal anti-detection - only hide navigator.webdriver to avoid Google "insecure browser" detection.
     """
-    system = platform.system()
-    launch_config = {
-        "headless": False,
-        "args": [
-            "--disable-blink-features=AutomationControlled",
-            "--no-sandbox",
-            "--disable-setuid-sandbox",
-            "--disable-dev-shm-usage",
-            "--disable-gpu",
-            "--disable-web-security",
-            "--disable-features=IsolateOrigins,site-per-process",
-        ]
-    }
-    
-    system = platform.system()
+    # MINIMAL ARGS: Only essential flags + hide automation marker
+    # --disable-blink-features=AutomationControlled prevents navigator.webdriver = true
+    # This is required to pass Google's "insecure browser" check
+    # Removed: --disable-web-security, --disable-gpu, --disable-features=IsolateOrigins,site-per-process
+    # Removed: --no-sandbox, --disable-setuid-sandbox (not needed outside containers)
+    base_args = [
+        "--disable-blink-features=AutomationControlled",
+        "--window-size=1920,1080",
+        "--disable-dev-shm-usage",
+    ]
     
     if platform.system() == "Windows":
         # Windows default is usually Edge. Check for Edge, then Chrome, then Brave.
@@ -50,12 +46,12 @@ def get_playwright_launch_config() -> dict:
             r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
         ]
         if any(os.path.exists(p) for p in edge_paths):
-            return {"headless": False, "channel": "msedge", "args": ["--disable-blink-features=AutomationControlled", "--no-sandbox", "--disable-setuid-sandbox"]}
+            return {"headless": False, "channel": "msedge", "args": base_args}
         elif shutil.which("chrome"):
-            return {"headless": False, "channel": "chrome", "args": ["--disable-blink-features=AutomationControlled", "--no-sandbox", "--disable-setuid-sandbox"]}
+            return {"headless": False, "channel": "chrome", "args": base_args}
         else:
             print("⚠️ No system Chromium browser found. Falling back to Playwright bundled Chromium.")
-            return {"headless": False, "args": ["--disable-blink-features=AutomationControlled", "--no-sandbox", "--disable-setuid-sandbox"]}
+            return {"headless": False, "args": base_args}
             
     elif platform.system() == "Darwin":  # macOS
         # macOS default is Safari, but Playwright CANNOT automate Safari for network interception.
@@ -63,28 +59,28 @@ def get_playwright_launch_config() -> dict:
         chrome_path = "/Applications/Google Chrome.app"
         edge_path = "/Applications/Microsoft Edge.app"
         if os.path.exists(chrome_path):
-            return {"headless": False, "channel": "chrome", "args": ["--disable-blink-features=AutomationControlled"]}
+            return {"headless": False, "channel": "chrome", "args": base_args}
         elif os.path.exists(edge_path):
-            return {"headless": False, "channel": "msedge", "args": ["--disable-blink-features=AutomationControlled"]}
+            return {"headless": False, "channel": "msedge", "args": base_args}
         else:
             print("⚠️ No system Chromium browser found. Falling back to Playwright bundled Chromium.")
-            return {"headless": False, "args": ["--disable-blink-features=AutomationControlled"]}
+            return {"headless": False, "args": base_args}
     else:  # Linux
         # Check for google-chrome, chromium, or brave
         if shutil.which("google-chrome"):
-            return {"headless": False, "channel": "chrome", "args": ["--disable-blink-features=AutomationControlled"]}
+            return {"headless": False, "channel": "chrome", "args": base_args}
         elif shutil.which("chromium"):
             # On Linux, 'chromium' channel might not exist, use bundled
             print("Detected system browser: Chromium")
-            return {"headless": False, "channel": "chromium", "args": ["--disable-blink-features=AutomationControlled"]}
+            return {"headless": False, "channel": "chromium", "args": base_args}
         elif shutil.which("brave-browser") or shutil.which("brave"):
             brave_path = shutil.which("brave-browser") or shutil.which("brave")
-            return {"headless": False, "executable_path": shutil.which("brave-browser") or shutil.which("brave"), "args": ["--disable-blink-features=AutomationControlled"]}
+            return {"headless": False, "executable_path": shutil.which("brave-browser") or shutil.which("brave"), "args": base_args}
         else:
             print("⚠️ No system Chromium browser found. Falling back to Playwright bundled Chromium.")
-            return {"headless": False, "args": ["--disable-blink-features=AutomationControlled"]}
+            return {"headless": False, "args": base_args}
 
-    return {"headless": False, "args": ["--disable-blink-features=AutomationControlled"]}
+    return {"headless": False, "args": base_args}
 
 
 def get_browser_launch_config() -> dict:
@@ -125,22 +121,20 @@ class LoginExtractor:
     One-time browser-based authentication extractor.
 
     Opens a visible browser, waits for manual Google OAuth login,
-    captures the authenticated DeepSeek API request, and persists
-    the authentication state.
+    captures the authenticated DeepSeek API request and response,
+    and persists the minimal authentication state.
     """
 
     def __init__(
         self,
         headless: bool = False,
         browser_type: str = "chromium",
-        use_persistent_profile: bool = False,
         timeout: int = 300,  # 5 minutes default
         auth_state_dir: Path = AUTH_STATE_DIR,
         auth_state_file: Path = AUTH_STATE_FILE,
     ):
         self.headless = headless
         self.browser_type = browser_type
-        self.use_persistent_profile = use_persistent_profile
         self.timeout = timeout
         self.auth_state_dir = auth_state_dir
         self.auth_state_file = auth_state_file
@@ -156,6 +150,9 @@ class LoginExtractor:
         self.browser_closed_early = False
         self._browser_closed = asyncio.Event()
         self._last_exception: Optional[Exception] = None
+        # Track authenticated response
+        self.auth_response_captured = asyncio.Event()
+        self.captured_response: Optional[Response] = None
 
     def _ensure_auth_dir(self):
         """Ensure the auth state directory exists."""
@@ -203,10 +200,17 @@ class LoginExtractor:
             cookies=cookies,
         )
 
-        # Capture request metadata
+        # Capture request metadata - including full browser fingerprint for WAF bypass
         self.captured_metadata = {
             "method": request.method,
             "url": request.url,
+            "browser_fingerprint": {
+                "user_agent": request.headers.get("user-agent") or request.headers.get("User-Agent", ""),
+                "origin": request.headers.get("origin") or request.headers.get("Origin", ""),
+                "referer": request.headers.get("referer") or request.headers.get("Referer", ""),
+                "sec_ch_ua": request.headers.get("sec-ch-ua") or request.headers.get("Sec-CH-UA", ""),
+                "sec_ch_ua_platform": request.headers.get("sec-ch-ua-platform") or request.headers.get("Sec-CH-UA-Platform", ""),
+            },
             "headers_present": {
                 "authorization": "PRESENT",
                 "cookie": "PRESENT" if cookie_header else "ABSENT",
@@ -220,8 +224,22 @@ class LoginExtractor:
             }
         }
 
-        # Signal that we captured the auth
+        # Signal that we captured the auth request
         self.auth_captured.set()
+
+    def _response_handler(self, response: Response):
+        """Playwright response interceptor to confirm authenticated request succeeded."""
+        if not response.url.startswith(TARGET_API_PREFIX):
+            return
+        
+        # Only care about responses to requests we already captured auth for
+        if self.captured_auth_state is None:
+            return
+            
+        if response.status == 200:
+            print(f"[+] Authenticated DeepSeek API response confirmed: {response.status} {response.url}")
+            self.captured_response = response
+            self.auth_response_captured.set()
 
     async def _close_handler(self):
         """Handle browser closure before auth capture."""
@@ -241,80 +259,47 @@ class LoginExtractor:
 
         async with async_playwright() as p:
             try:
-                # Launch browser with anti-detection measures using dynamic browser detection
-                print("[*] Launching browser with anti-detection measures...")
+                # Launch browser with CLEAN configuration - no security weakening
+                print("[*] Launching browser...")
                 
-                # Get dynamic browser launch configuration
                 launch_config = get_browser_launch_config()
+                print(f"[*] Launching {launch_config.get('channel', 'bundled')} browser...")
                 
-                # Determine if we should use persistent profile
-                if self.use_persistent_profile:
-                    # Use persistent profile with detected system browser
-                    user_data_dir = self._get_chrome_user_data_dir()
-                    print(f"[*] Using real Chrome profile: {self._get_chrome_user_data_dir()}")
-                    print("⚠️  WARNING: Ensure ALL Chrome/Edge/Brave windows are completely closed before proceeding!")
-                    
-                    context = await p.chromium.launch_persistent_context(
-                        user_data_dir=self._get_chrome_user_data_dir(),
-                        headless=self.headless,
-                        channel="chrome",  # Use system Chrome for persistent profile
-                        args=["--disable-blink-features=AutomationControlled"],
-                        ignore_https_errors=True,
-                        viewport={"width": 1920, "height": 1080},
-                        user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                        locale="en-US",
-                        timezone_id="America/New_York",
-                    )
-                    self.context = context
-                    self.browser = None
-                    page = context.pages[0] if context.pages else await context.new_page()
-                    self.page = page
-                    self.browser = None
-                else:
-                    # Get dynamic browser launch configuration
-                    launch_config = get_browser_launch_config()
-                    
-                    # Launch browser with dynamic configuration
-                    print(f"[*] Launching {launch_config.get('channel', 'bundled')} browser...")
-                    browser = await p.chromium.launch(
-                        headless=launch_config["headless"],
-                        channel=launch_config.get("channel"),
-                        args=launch_config.get("args", []),
-                        executable_path=launch_config.get("executable_path"),
-                    )
-                    self.browser = browser
+                browser = await p.chromium.launch(
+                    headless=launch_config["headless"],
+                    channel=launch_config.get("channel"),
+                    args=launch_config.get("args", []),
+                    executable_path=launch_config.get("executable_path"),
+                )
+                self.browser = browser
 
-                    # Create context with anti-detection settings
-                    context = await browser.new_context(
-                        ignore_https_errors=True,
-                        user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                        viewport={"width": 1920, "height": 1080},
-                        locale="en-US",
-                        timezone_id="America/New_York",
-                    )
-                    self.context = context
+                # Create context with CLEAN settings - NO ignore_https_errors, NO hardcoded UA
+                # Use browser's actual defaults for locale, timezone, UA
+                context = await browser.new_context(
+                    # REMOVED: ignore_https_errors=True  - TLS must be valid
+                    # REMOVED: hardcoded user_agent - use browser's real UA
+                    viewport={"width": 1920, "height": 1080},
+                    # REMOVED: device_scale_factor=2.0 - use default
+                    # REMOVED: hardcoded locale - use browser default
+                    # REMOVED: hardcoded timezone_id - use browser default
+                    # REMOVED: permissions=["geolocation"] - not needed
+                )
+                self.context = context
 
-                    # CRITICAL: Inject script to overwrite navigator.webdriver BEFORE any page loads
-                    await context.add_init_script("""
-                        Object.defineProperty(navigator, 'webdriver', {
-                            get: () => undefined
-                        });
-                    """)
+                # Create page
+                page = await context.new_page()
+                self.page = page
 
-                    page = await context.new_page()
-                    self.page = page
-                    self.browser = browser
-                    self.context = context
+                # REMOVED: navigator.webdriver override - we want normal browser behavior
+                # REMOVED: window.chrome injection - not needed
 
-                # Set up request interception
+                # Set up request AND response interception
                 self.context.on("request", self._request_handler)
+                self.context.on("response", self._response_handler)
 
                 # Handle browser closure
-                if self.use_persistent_profile:
-                    self.context.on("close", self._close_handler)
-                else:
-                    self.context.on("close", self._close_handler)
-                    self.browser.on("disconnected", self._close_handler)
+                self.context.on("close", self._close_handler)
+                self.browser.on("disconnected", self._close_handler)
 
                 # Navigate to sign-in page
                 print("[*] Navigating to DeepSeek sign-in page...")
@@ -331,7 +316,7 @@ class LoginExtractor:
                 print("=" * 60)
                 print()
 
-                # Wait for auth capture or timeout/browser close
+                # Wait for auth request capture
                 try:
                     await asyncio.wait_for(self.auth_captured.wait(), timeout=self.timeout)
                 except asyncio.TimeoutError:
@@ -347,9 +332,16 @@ class LoginExtractor:
                         error="Browser closed before authentication was captured",
                     )
 
-                # Auth captured - now collect full cookies and storage state
-                print("\n[+] Authenticated request captured!")
-                print("[*] Collecting cookies and storage state...")
+                # NOW wait for the authenticated response to confirm success
+                print("[+] Auth request captured. Waiting for successful response...")
+                try:
+                    await asyncio.wait_for(self.auth_response_captured.wait(), timeout=10)
+                except asyncio.TimeoutError:
+                    print("[!] Response not received within 10s, but auth was captured. Continuing...")
+
+                # Auth captured and response confirmed - now collect full cookies
+                print("\n[+] Authentication confirmed!")
+                print("[*] Collecting cookies...")
 
                 # Get full cookies
                 cookies = await self.context.cookies()
@@ -364,9 +356,6 @@ class LoginExtractor:
 
                 print(f"    Captured {cookie_count} DeepSeek cookies: {', '.join(cookie_names)}")
 
-                # Capture storage state for potential future use
-                storage_state = await self.context.storage_state()
-
                 # Extract ds_session_id and smidV2 explicitly
                 ds_session_id = self.captured_auth_state.cookies.get("ds_session_id", "")
                 smidV2 = self.captured_auth_state.cookies.get("smidV2", "")
@@ -376,9 +365,9 @@ class LoginExtractor:
                 self.captured_auth_state.smidV2 = smidV2
                 self.captured_auth_state.last_used = datetime.now()
 
-                # Build complete auth state with storage state
+                # Build MINIMAL auth state - NO storage_state
                 auth_state_data = {
-                    "version": 1,
+                    "version": 2,
                     "captured_at": datetime.now().isoformat(),
                     "authorization": {
                         "scheme": "Bearer",
@@ -397,7 +386,10 @@ class LoginExtractor:
                         }
                         for k, v in self.captured_auth_state.cookies.items()
                     ],
-                    "storage_state": storage_state,
+                    "client": {
+                        "browser": launch_config.get("channel", "bundled"),
+                    },
+                    "browser_fingerprint": self.captured_metadata.get("browser_fingerprint", {}),
                 }
 
                 # Persist atomically
@@ -428,21 +420,11 @@ class LoginExtractor:
                     error=str(e),
                 )
 
-    def _get_chrome_user_data_dir(self) -> str:
-        """Get the default Chrome User Data directory based on OS."""
-        os_name = platform.system()
-        if os_name == "Windows":
-            return os.path.join(os.environ["LOCALAPPDATA"], "Google", "Chrome", "User Data")
-        elif os_name == "Darwin":  # macOS
-            return os.path.expanduser("~/Library/Application Support/Google/Chrome")
-        else:  # Linux
-            return os.path.expanduser("~/.config/google-chrome")
-
     async def _persist_auth_state(self, data: Dict[str, Any]):
         """Persist authentication state atomically."""
         self.auth_state_dir.mkdir(mode=0o700, exist_ok=True)
 
-        # Write to temp file
+        # Write to temp file in SAME directory for atomic replace
         with open(self.auth_state_tmp, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2)
             f.flush()
@@ -459,26 +441,13 @@ class LoginExtractor:
             pass  # Windows may not support chmod
 
 
-def _get_chrome_user_data_dir_static() -> str:
-    """Static method to get Chrome user data directory."""
-    os_name = platform.system()
-    if os_name == "Windows":
-        return os.path.join(os.environ["LOCALAPPDATA"], "Google", "Chrome", "User Data")
-    elif os_name == "Darwin":  # macOS
-        return os.path.expanduser("~/Library/Application Support/Google/Chrome")
-    else:  # Linux
-        return os.path.expanduser("~/.config/google-chrome")
-
-
 async def run_login_extractor(
     headless: bool = False,
-    use_persistent_profile: bool = False,
     timeout: int = 300,
 ) -> LoginResult:
     """Entry point for running the login extractor."""
     extractor = LoginExtractor(
         headless=headless,
-        use_persistent_profile=use_persistent_profile,
         timeout=timeout,
     )
     return await extractor.run()
@@ -490,13 +459,11 @@ def main():
 
     parser = argparse.ArgumentParser(description="DeepSeek Authentication Extractor")
     parser.add_argument("--headless", action="store_true", help="Run browser in headless mode (not recommended for initial login)")
-    parser.add_argument("--persistent-profile", action="store_true", help="Use real Chrome profile (requires all Chrome windows closed)")
     parser.add_argument("--timeout", type=int, default=300, help="Timeout in seconds")
     args = parser.parse_args()
 
     result = asyncio.run(run_login_extractor(
         headless=args.headless,
-        use_persistent_profile=args.persistent_profile,
         timeout=args.timeout,
     ))
 

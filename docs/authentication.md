@@ -22,10 +22,13 @@
 |----------|--------|--------|-------|
 | `/api/v0/chat_session/create` | POST | ✅ Working | Creates chat session, returns UUID + TTL |
 | `/api/v0/chat/completion` | POST | ✅ Working | Main endpoint, requires dynamic headers |
+| `/api/v0/chat/create_pow_challenge` | POST | ✅ Working | Returns fresh PoW challenge (5 min TTL) |
 | `/api/v0/auth/login` | POST | ❌ Not observed | Likely used during initial login |
 | `/api/v0/auth/refresh` | POST | ❌ Not observed | Token refresh mechanism unknown |
 | `/api/v0/chat/sessions` | GET | ❌ Not tested | May list user's sessions |
-| `/api/v0/pow/challenge` | GET | ❌ Not observed | PoW challenge source unknown |
+| `GET https://hif-leim.deepseek.com/query` | GET | ✅ Working | Returns x-hif-leim token (10 min TTL) |
+| `GET https://hif-dliq.deepseek.com/query` | GET | ⚠️ Unknown | Empty response, possibly config |
+| `GET https://fe-static.deepseek.com/chat/static/sha3_wasm_bg.7b9ca65ddd.wasm` | GET | ✅ Working | DeepSeekHashV1 WASM module |
 
 ## Cookie Analysis
 

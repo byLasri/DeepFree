@@ -104,7 +104,70 @@ DynamicHeaderProvider (abstract)
 
 ---
 
-## 4. Protocol Specification Summary
+## 4. Dynamic Header Generation Flow (NEW - from did.txt)
+
+### Complete Dynamic Header Generation Sequence
+
+```
+1. GET https://hif-leim.deepseek.com/query
+   → Returns: {"value": "token1.token2"} (x-hif-leim)
+   → Header: x-hif-ttl: 600 (10 min TTL)
+
+2. POST https://chat.deepseek.com/api/v0/chat/create_pow_challenge
+   Body: {"target_path": "/api/v0/chat/completion"}
+   → Returns: challenge object (see below)
+   → TTL: expire_after: 300000ms (5 min)
+
+3. Browser WASM (sha3_wasm_bg.7b9ca65ddd.wasm) computes PoW
+   Input: challenge + salt + difficulty
+   Output: x-ds-pow-response (Base64 JSON)
+
+4. POST /api/v0/chat/completion with:
+   - Authorization: Bearer <token>
+   - Cookie: ds_session_id, smidV2
+   - x-ds-pow-response: <from step 3>
+   - x-hif-leim: <from step 1>
+```
+
+### PoW Challenge Endpoint
+**Endpoint:** `POST https://chat.deepseek.com/api/v0/chat/create_pow_challenge`
+**Request:** `{"target_path": "/api/v0/chat/completion"}`
+
+**Response (from did.txt):**
+```json
+{
+  "algorithm": "DeepSeekHashV1",
+  "challenge": "780f82ae19064aaff9881fa8b4251816b702b4ecc80bc2af73ec965199a969ee",
+  "salt": "d171f1aec3da3ac48f57",
+  "signature": "3b5d8f80f3592e5a6b4b682eb13186798afa7790524c1133c17e4b18aae5378b",
+  "difficulty": 144000,
+  "expire_after": 300000,
+  "target_path": "/api/v0/chat/completion"
+}
+```
+- `difficulty`: 144000 (target iterations)
+- `expire_after`: 300000ms (5 minutes)
+- `expire_at`: Unix timestamp ms
+
+### hif-leim Endpoint
+**Endpoint:** `GET https://hif-leim.deepseek.com/query`
+**Response:**
+```json
+{"value": "s20JYwHYC1atRunfDKIj5HAxiNtg9a9orEJmixRMIXlA3s4cNnGjWEQ=.3JK3cGbp6egbd713"}
+```
+**Header:** `x-hif-ttl: 600` (10 minutes)
+
+### hif-dliq Endpoint
+**Endpoint:** `GET https://hif-dliq.deepseek.com/query`
+**Response:** Empty (status 0, no content)
+
+### WASM Module
+**URL:** `https://fe-static.deepseek.com/chat/static/sha3_wasm_bg.7b9ca65ddd.wasm`
+**Purpose:** Implements `DeepSeekHashV1` PoW in WebAssembly
+
+---
+
+## 5. Protocol Specification Summary
 
 ### Endpoint
 ```

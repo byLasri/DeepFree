@@ -1,152 +1,196 @@
-# Dynamic Headers Analysis
+# Dynamic Headers Analysis (Updated with did.txt findings)
 
-## x-ds-pow-response (Proof-of-Work)
+## Complete Dynamic Header Generation Flow
 
-### Decoded Structure (from HAR)
+The browser performs this sequence before each completion request:
 
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ 1. GET https://hif-leim.deepseek.com/query                      │
+│    → Returns: {"value": "token1.token2"}                        │
+│    → Header: x-hif-ttl: 600 (10 min TTL)                        │
+│    → Used as: x-hif-leim header                                 │
+├─────────────────────────────────────────────────────────────────┤
+│ 2. POST https://chat.deepseek.com/api/v0/chat/create_pow_challenge│
+│    Body: {"target_path": "/api/v0/chat/completion"}             │
+│    → Returns: challenge object (see below)                      │
+│    → TTL: expire_after: 300000ms (5 min)                        │
+├─────────────────────────────────────────────────────────────────┤
+│ 3. Browser WASM (sha3_wasm_bg.7b9ca65ddd.wasm) computes PoW    │
+│    Input: challenge + salt + difficulty                         │
+│    Output: x-ds-pow-response (Base64 JSON)                      │
+├─────────────────────────────────────────────────────────────────┤
+│ 4. POST /api/v0/chat/completion with:                           │
+│    - Authorization: Bearer <token>                              │
+│    - Cookie: ds_session_id, smidV2                              │
+│    - x-ds-pow-response: <from step 3>                          │
+│    - x-hif-leim: <from step 1>                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## PoW Challenge Endpoint
+
+**Endpoint:** `POST https://chat.deepseek.com/api/v0/chat/create_pow_challenge`
+
+**Request:**
 ```json
 {
-  "algorithm": "DeepSeekHashV1",
-  "challenge": "018c5d809382c6730c596c0aa750cd584a45139eb92a53c02d57ed257cbf6882",
-  "salt": "b9455676eb7a44a1fa47",
-  "answer": 113060,
-  "signature": "f228a4150c6e3da508dbf3eb5a8af3306e49a57adb26cc1b5029421a44f2b6e9",
   "target_path": "/api/v0/chat/completion"
 }
 ```
 
-### Field Analysis
-
-| Field | Type | Description | Variability |
-|-------|------|-------------|-------------|
-| `algorithm` | String | Fixed: `"DeepSeekHashV1"` | Static |
-| `challenge` | Hex string (32 bytes) | PoW challenge, likely random per request | Per-request |
-| `salt` | Hex string (10 bytes) | Salt for hash computation | Per-request |
-| `answer` | Integer | PoW solution (iterations to find valid hash) | Per-request |
-| `signature` | Hex string (32 bytes) | HMAC(challenge + salt + answer) or similar | Per-request |
-| `target_path` | String | API endpoint this PoW authorizes | Static |
-
-### Behavioral Evidence
-
-| Test | Result | Conclusion |
-|------|--------|------------|
-| Replay same PoW | 40301 INVALID_POW_RESPONSE | **Single-use** |
-| Omit PoW | 40300 MISSING_HEADER | **Required** |
-| Stale PoW (from HAR) | 40301 INVALID_POW_RESPONSE | **Time-bound / challenge-bound** |
-| Challenge source | Not in HAR | Unknown (separate endpoint? embedded? client-generated?) |
-
-### Generation Mechanism
-
-**Hypothesis:** Client-side WebAssembly (`DeepSeekHashV1`)
-
-**Evidence:**
-- Algorithm name suggests custom hash function
-- `answer` is integer (iterations) — typical PoW pattern
-- `signature` suggests cryptographic binding
-- No `/api/v0/pow/challenge` endpoint observed in HAR
-- Challenge likely embedded in page JS or derived from session state
-
-**Required for automation:**
-1. Reverse-engineer `DeepSeekHashV1` WASM module
-2. Or use Playwright to execute browser JS
-3. Challenge acquisition method unknown
-
----
-
-## x-hif-leim (Fingerprint/Anti-Abuse)
-
-### Format
-
-```
-part1.part2
-Example: BgH7I7g1cqigR+8XV+1y+xWQmuypjuhm2usNJqnK47xLG8T2NcJH7jU=.uxA+cpEf4ZqZK7FL
+**Response (from did.txt):**
+```json
+{
+  "code": 0,
+  "msg": "",
+  "data": {
+    "biz_code": 0,
+    "biz_msg": "",
+    "biz_data": {
+      "challenge": {
+        "algorithm": "DeepSeekHashV1",
+        "challenge": "780f82ae19064aaff9881fa8b4251816b702b4ecc80bc2af73ec965199a969ee",
+        "salt": "d171f1aec3da3ac48f57",
+        "signature": "3b5d8f80f3592e5a6b4b682eb13186798afa7790524c1133c17e4b18aae5378b",
+        "difficulty": 144000,
+        "expire_at": 1788753000769,
+        "expire_after": 300000,
+        "target_path": "/api/v0/chat/completion"
+      }
+    }
+  }
+}
 ```
 
-### Behavioral Evidence
+| Field | Description |
+|-------|-------------|
+| `algorithm` | `"DeepSeekHashV1"` - Custom SHA3-based PoW |
+| `challenge` | 32-byte hex challenge string |
+| `salt` | 10-byte hex salt |
+| `signature` | 32-byte hex - HMAC of challenge+salt |
+| `difficulty` | 144000 - Target difficulty (iterations) |
+| `expire_after` | 300000ms (5 minutes) - Challenge TTL |
+| `target_path` | API endpoint this challenge authorizes |
 
-| Test | Result | Conclusion |
-|------|--------|------------|
-| Present with valid PoW | 40301 INVALID_POW_RESPONSE | Required when PoW present |
-| Omitted with valid PoW | 40301 INVALID_POW_RESPONSE | **Required** |
-| Omitted without PoW | 40300 MISSING_HEADER | Required alongside PoW |
-| Present without PoW | 40300 MISSING_HEADER | Not sufficient alone |
-
-### Properties
-
-| Property | Value |
-|----------|-------|
-| Variability | Per-request (changes every request) |
-| Format | Two base64url parts separated by `.` |
-| Length | ~100 chars total |
-| Generation | Browser JavaScript (likely fingerprinting) |
-| Dependencies | Unknown (timestamp? session? request payload? canvas fingerprint?) |
-
-### Search for Generation Code
-
-**Searched in browser DevTools for:** `hif`, `leim`, `x-hif-leim`, `hif-leim`
-
-**Results:** Not found in loaded JS bundles (may be obfuscated/WASM)
-
-### Hypothesis
-
-`x-hif-leim` is a **browser fingerprint token** combining:
-- Canvas/WebGL fingerprint
-- Timestamp/nonce
-- Session binding
-- Request payload hash
-
-Generated by obfuscated client-side JS, possibly in a Web Worker or WASM module.
+**Key Insight:** Challenge is **per-request**, expires in **5 minutes**. Must fetch fresh challenge for each completion.
 
 ---
 
-## Header Requirement Summary
+## hif-leim Endpoint
 
-| Header | Required? | Scope | Generation |
-|--------|-----------|-------|------------|
-| `Authorization` | ✅ YES | Session | Login |
-| `Cookie` | ⚠️ Optional* | Session | Login |
-| `x-ds-pow-response` | ✅ YES | Per-request | Browser WASM |
-| `x-hif-leim` | ✅ YES | Per-request | Browser JS |
-| `x-client-*` | ✅ YES | Static | Static config |
+**Endpoint:** `GET https://hif-leim.deepseek.com/query`
 
-*Cookie optional IF auth + PoW + hif are valid and fresh.
+**Response (from did.txt):**
+```json
+{
+  "code": 0,
+  "msg": "",
+  "data": {
+    "biz_code": 0,
+    "biz_msg": "",
+    "biz_data": {
+      "value": "s20JYwHYC1atRunfDKIj5HAxiNtg9a9orEJmixRMIXlA3s4cNnGjWEQ=.3JK3cGbp6egbd713"
+    }
+  }
+}
+```
+
+**Response Header:** `x-hif-ttl: 600` (10 minutes = 600 seconds)
+
+**Token Format:** `part1.part2` (two base64url parts separated by `.`)
+
+**Usage:** This exact `value` string becomes the `x-hif-leim` header.
+
+**TTL:** 10 minutes (600 seconds) - longer than PoW challenge.
 
 ---
 
-## Automation Strategy
+## hif-dliq Endpoint
 
-### Option 1: Browser Automation (Recommended)
+**Endpoint:** `GET https://hif-dliq.deepseek.com/query`
+
+**Response:** Empty (status 0, no content, base64 encoded empty)
+
+**Purpose:** Unknown - possibly configuration/fingerprinting setup. Called with CORS preflight (OPTIONS + GET).
+
+---
+
+## WASM Module
+
+**URL:** `https://fe-static.deepseek.com/chat/static/sha3_wasm_bg.7b9ca65ddd.wasm`
+
+**Purpose:** Implements `DeepSeekHashV1` PoW algorithm in WebAssembly.
+
+**Likely exports:**
+- Hash function (SHA3-256 or custom)
+- PoW solver (finds nonce where hash < target)
+- Signature verification
+
+---
+
+## Client Settings / Device ID
+
+**Endpoint:** `GET /api/v0/client/settings?did=af639245-51a0-4091-b31a-ea36fe57bc25&scope=...`
+
+**Scopes:** `main`, `model`, `provider`, `web_upgrade`
+
+**Parameter:** `did` = Device ID (UUID) - likely from `smidV2` cookie or localStorage
+
+---
+
+## Complete Automation Flow (for BrowserDynamicHeaderProvider)
+
 ```python
-# Playwright
-browser = playwright.chromium.launch()
-context = browser.new_context()
-page = context.new_page()
-page.goto("https://chat.deepseek.com")
-# ... login ...
-# For each request:
-pow, hif = page.evaluate("() => generateDynamicHeaders(payload)")
+async def generate_dynamic_headers(session, payload):
+    # 1. Get hif-leim token (cache for 10 min)
+    if not session.hif_token or session.hif_expired:
+        resp = await browser.get("https://hif-leim.deepseek.com/query")
+        session.hif_token = resp.json()["data"]["biz_data"]["value"]
+        session.hif_expires = now() + 600
+    
+    # 2. Get PoW challenge (cache for 5 min)
+    if not session.pow_challenge or session.pow_expired:
+        resp = await browser.post(
+            "https://chat.deepseek.com/api/v0/chat/create_pow_challenge",
+            json={"target_path": "/api/v0/chat/completion"}
+        )
+        session.pow_challenge = resp.json()["data"]["biz_data"]["challenge"]
+        session.pow_expires = now() + 300
+    
+    # 3. Compute PoW using WASM (in browser context)
+    pow_response = await browser.eval_wasm(
+        "sha3_wasm_bg",
+        "solve_pow",
+        session.pow_challenge
+    )
+    
+    # 4. Build headers
+    return {
+        "x-ds-pow-response": pow_response,
+        "x-hif-leim": session.hif_token,
+    }
 ```
-
-### Option 2: WASM Reverse Engineering
-- Extract `DeepSeekHashV1` WASM from page
-- Reimplement in Python/Rust
-- **Risk:** Obfuscation, updates, ToS violation
-
-### Option 3: Challenge Endpoint Discovery
-- Find `/api/v0/pow/challenge` or similar
-- **Not observed in HAR** — may not exist
 
 ---
 
-## Replay Matrix (Full)
+## Key Timing Constraints
 
-| Headers Present | HTTP | DeepSeek Code | Notes |
-|-----------------|------|---------------|-------|
-| auth + cookie + PoW + hif | 200 | 40301 | PoW expired |
-| auth + cookie + hif | 200 | 40300 | Missing PoW |
-| auth + cookie + PoW | 200 | 40301 | Missing hif |
-| auth + cookie | 200 | 40300 | Missing both |
-| cookie + PoW + hif | 200 | 40003 | Missing auth |
-| auth + PoW + hif | 200 | 40301 | No cookie, PoW expired |
+| Component | TTL | Refresh Strategy |
+|-----------|-----|------------------|
+| `x-hif-leim` | 600s (10 min) | Fetch before expiry |
+| PoW challenge | 300s (5 min) | Fetch per completion |
+| PoW response | Single-use | Generate fresh each request |
+| Challenge signature | Bound to challenge | Recompute per challenge |
 
-**Conclusion:** All three dynamic headers (auth, PoW, hif) are strictly required for a valid request.
+---
+
+## Security Notes
+
+- Challenge `signature` binds challenge+salt - prevents replay
+- Difficulty `144000` = ~144k iterations target
+- WASM execution in browser = legitimate automation path
+- **No API to bypass WASM** - must execute in browser context
+- `did` (device ID) likely ties to `smidV2` cookie

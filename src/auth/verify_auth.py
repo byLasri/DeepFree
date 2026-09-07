@@ -152,15 +152,22 @@ class AuthVerifier:
         text = response.text[:2000] if response.text else ""
         text_lower = text.lower()
 
-        # Check for explicit authentication failure (401)
+        # 1. Parse DeepSeek JSON Envelope (Crucial for 200 OK errors)
+        # DeepSeek often returns HTTP 200 with error code inside JSON body
+        try:
+            resp_json = response.json()
+            biz_code = resp_json.get("code") or resp_json.get("biz_code")
+            biz_msg = (resp_json.get("msg") or resp_json.get("biz_msg") or "").lower()
+            
+            if biz_code in [40001, 40003, 40005] or "invalid token" in biz_msg or "expired" in biz_msg:
+                return (VerificationResult.EXPIRED, True, f"Token expired/invalid (DeepSeek code {biz_code})")
+        except ValueError:
+            pass  # Not JSON, fall back to HTTP status
+
+        # 2. Check HTTP Status Codes
         if status == 401:
             return (VerificationResult.FAILED, True, "Explicit authentication failure (401)")
 
-        # Check for token expiration (DeepSeek returns 400 with specific error)
-        if status == 400 and ("invalid token" in text_lower or "token expired" in text_lower or "40003" in text_lower):
-            return (VerificationResult.EXPIRED, True, "Token expired or invalid. Please run 'deepfree login' again.")
-
-        # Check for dynamic protection errors (PoW, hif-leim)
         if status == 403:
             if any(keyword in text_lower for keyword in [
                 "invalid_pow", "missing_pow", "pow", "40301",
@@ -168,8 +175,8 @@ class AuthVerifier:
                 "hif", "challenge"
             ]):
                 return (VerificationResult.BLOCKED_BY_DYNAMIC_PROTECTION, False, "Blocked by dynamic request protection")
+            return (VerificationResult.FAILED, True, "Forbidden (403)")
 
-        # Success
         if status == 200:
             return (VerificationResult.VERIFIED, False, "Success")
 

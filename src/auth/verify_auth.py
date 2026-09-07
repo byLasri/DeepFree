@@ -224,7 +224,7 @@ class AuthVerifier:
 
                 status, explicit_auth_failure, reason = self._classify_response(response)
 
-                metadata = {
+                response_metadata = {
                     "http_status": response.status_code,
                     "response_preview": response.text[:500] if response.text else "",
                     "headers_present": {
@@ -241,6 +241,9 @@ class AuthVerifier:
                     "explicit_auth_failure": response.status_code == 401,
                     "reason": reason,
                 }
+
+                # CRITICAL: Merge into the original metadata dict instead of overwriting it
+                metadata.update(response_metadata)
 
                 return VerificationResult(
                     status=status,

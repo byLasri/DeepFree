@@ -10,6 +10,7 @@ import json
 import os
 import platform
 import shutil
+import subprocess
 import sys
 import time
 from dataclasses import dataclass
@@ -22,10 +23,78 @@ from playwright.async_api import async_playwright, Browser, BrowserContext, Page
 from ..session import AuthState
 
 
+def detect_system_default_browser() -> str:
+    """
+    Detects the system's default browser using native OS APIs.
+    Returns: 'chrome', 'msedge', 'firefox', 'safari', or 'unknown'.
+    """
+    system = platform.system()
+
+    if system == "Windows":
+        try:
+            import winreg
+            # Read Windows Registry for HTTPS handler
+            key_path = r"Software\Microsoft\Windows\Shell\Associations\UrlAssociations\https\UserChoice"
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path) as key:
+                prog_id, _ = winreg.QueryValueEx(key, "ProgId")
+                
+                prog_id = prog_id.lower()
+                if "chrome" in prog_id:
+                    return "chrome"
+                if "edge" in prog_id or "msedge" in prog_id:
+                    return "msedge"
+                if "firefox" in prog_id:
+                    return "firefox"
+                if "brave" in prog_id:
+                    return "brave"
+        except Exception:
+            pass  # Fallback to path checking if registry fails
+
+    elif system == "Darwin":  # macOS
+        try:
+            # Use 'defaults' to find the handler for https
+            result = subprocess.run(
+                ["defaults", "read", "com.apple.LaunchServices/com.apple.launchservices.secure", "LSHandlers"],
+                capture_output=True, text=True, timeout=2
+            )
+            output = result.stdout.lower()
+            # Look for the handler associated with https
+            if "com.google.chrome" in output:
+                return "chrome"
+            if "com.microsoft.edg" in output:
+                return "msedge"
+            if "org.mozilla.firefox" in output:
+                return "firefox"
+            if "com.apple.safari" in output:
+                return "safari"
+        except Exception:
+            pass
+
+    elif system == "Linux":
+        try:
+            result = subprocess.run(
+                ["xdg-settings", "get", "default-web-browser"],
+                capture_output=True, text=True, timeout=2
+            )
+            desktop_file = result.stdout.strip().lower()
+            if "chrome" in desktop_file:
+                return "chrome"
+            if "edge" in desktop_file:
+                return "msedge"
+            if "firefox" in desktop_file:
+                return "firefox"
+            if "brave" in desktop_file:
+                return "brave"
+        except Exception:
+            pass
+
+    return "unknown"
+
+
 def get_playwright_launch_config() -> dict:
     """
     Detect system default browser and return appropriate Playwright launch configuration.
-    Prioritizes system-installed Chromium-based browsers (Edge, Chrome, Brave) over Playwright's bundled Chromium.
+    Uses native OS APIs to find the true default browser, with fallback to installed browsers.
     HARDENED: Minimal anti-detection - only hide navigator.webdriver to avoid Google "insecure browser" detection.
     """
     # MINIMAL ARGS: Only essential flags + hide automation marker
@@ -39,48 +108,60 @@ def get_playwright_launch_config() -> dict:
         "--disable-dev-shm-usage",
     ]
     
-    if platform.system() == "Windows":
-        # Windows default is usually Edge. Check for Edge, then Chrome, then Brave.
-        edge_paths = [
-            r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
-            r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
-        ]
-        if any(os.path.exists(p) for p in edge_paths):
-            return {"headless": False, "channel": "msedge", "args": base_args}
-        elif shutil.which("chrome"):
-            return {"headless": False, "channel": "chrome", "args": base_args}
-        else:
-            print("⚠️ No system Chromium browser found. Falling back to Playwright bundled Chromium.")
-            return {"headless": False, "args": base_args}
-            
-    elif platform.system() == "Darwin":  # macOS
-        # macOS default is Safari, but Playwright CANNOT automate Safari for network interception.
-        # We must fallback to Chrome or Edge if installed.
-        chrome_path = "/Applications/Google Chrome.app"
-        edge_path = "/Applications/Microsoft Edge.app"
-        if os.path.exists(chrome_path):
-            return {"headless": False, "channel": "chrome", "args": base_args}
-        elif os.path.exists(edge_path):
-            return {"headless": False, "channel": "msedge", "args": base_args}
-        else:
-            print("⚠️ No system Chromium browser found. Falling back to Playwright bundled Chromium.")
-            return {"headless": False, "args": base_args}
-    else:  # Linux
-        # Check for google-chrome, chromium, or brave
-        if shutil.which("google-chrome"):
-            return {"headless": False, "channel": "chrome", "args": base_args}
-        elif shutil.which("chromium"):
-            # On Linux, 'chromium' channel might not exist, use bundled
-            print("Detected system browser: Chromium")
-            return {"headless": False, "channel": "chromium", "args": base_args}
-        elif shutil.which("brave-browser") or shutil.which("brave"):
-            brave_path = shutil.which("brave-browser") or shutil.which("brave")
-            return {"headless": False, "executable_path": shutil.which("brave-browser") or shutil.which("brave"), "args": base_args}
-        else:
-            print("⚠️ No system Chromium browser found. Falling back to Playwright bundled Chromium.")
-            return {"headless": False, "args": base_args}
+    system = platform.system()
+    
+    # 1. TRY TO USE SYSTEM DEFAULT
+    default_browser = detect_system_default_browser()
+    print(f"[*] Detected system default browser: {default_browser}")
 
-    return {"headless": False, "args": base_args}
+    # Playwright supports: chrome, msedge, firefox, webkit
+    # It does NOT support automating real Safari (only WebKit engine)
+    # For Google OAuth compatibility, PREFER Chromium-based browsers (Chrome/Edge)
+    # as Google often blocks automated Firefox
+    if default_browser in ["chrome", "msedge"]:
+        print(f"[*] Using system default Chromium browser: {default_browser}")
+        return {
+            "headless": False,
+            "channel": default_browser,
+            "args": base_args
+        }
+    
+    if default_browser == "firefox":
+        print("[WARN] Firefox detected as default, but Google OAuth blocks automated Firefox. Searching for Chromium alternative...")
+    
+    if default_browser == "safari":
+        print("[WARN] Safari is not fully supported for automated OAuth. Searching for alternatives...")
+
+    # Fallback order: Chrome -> Edge -> Brave -> Firefox
+    fallback_checks = [
+        ("chrome", shutil.which("google-chrome") or shutil.which("chrome")),
+        ("msedge", shutil.which("msedge") or shutil.which("edge")),
+        ("brave", shutil.which("brave-browser") or shutil.which("brave")),
+        ("firefox", shutil.which("firefox")),
+    ]
+    
+    # Windows specific path checks if shutil.which fails
+    if system == "Windows":
+        if os.path.exists(r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"):
+            fallback_checks.append(("msedge", True))
+        if os.path.exists(r"C:\Program Files\Google\Chrome\Application\chrome.exe"):
+            fallback_checks.append(("chrome", True))
+
+    for channel, path in fallback_checks:
+        if path:
+            print(f"[*] Falling back to installed {channel}.")
+            return {
+                "headless": False,
+                "channel": channel,
+                "args": base_args
+            }
+
+    # 3. FINAL FALLBACK: Playwright Bundled Chromium
+    print("[WARN] No supported system browser found. Using Playwright bundled Chromium.")
+    return {
+        "headless": False,
+        "args": base_args
+    }
 
 
 def get_browser_launch_config() -> dict:
@@ -263,21 +344,42 @@ class LoginExtractor:
                 print("[*] Launching browser...")
                 
                 launch_config = get_browser_launch_config()
-                print(f"[*] Launching {launch_config.get('channel', 'bundled')} browser...")
+                channel = launch_config.get('channel', 'bundled')
+                print(f"[*] Launching {channel} browser...")
                 
-                browser = await p.chromium.launch(
-                    headless=launch_config["headless"],
-                    channel=launch_config.get("channel"),
-                    args=launch_config.get("args", []),
-                    executable_path=launch_config.get("executable_path"),
-                )
+                # Handle different browser engines
+                if channel == "firefox":
+                    # Firefox-specific args (no --disable-blink-features=AutomationControlled)
+                    firefox_args = [arg for arg in launch_config.get("args", []) 
+                                   if arg != "--disable-blink-features=AutomationControlled"]
+                    browser = await p.firefox.launch(
+                        headless=launch_config["headless"],
+                        args=firefox_args,
+                    )
+                else:
+                    # Chromium-based browsers (Chrome, Edge, bundled Chromium)
+                    browser = await p.chromium.launch(
+                        headless=launch_config["headless"],
+                        channel=launch_config.get("channel"),
+                        args=launch_config.get("args", []),
+                        executable_path=launch_config.get("executable_path"),
+                    )
                 self.browser = browser
 
-                # Create context with CLEAN settings - NO ignore_https_errors, NO hardcoded UA
-                # Use browser's actual defaults for locale, timezone, UA, viewport
+                # Sync User-Agent with detected browser channel
+                UA_MAP = {
+                    "chrome": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
+                    "msedge": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36 Edg/128.0.0.0",
+                    "firefox": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:129.0) Gecko/20100101 Firefox/129.0",
+                }
+                detected_ua = UA_MAP.get(channel, UA_MAP["chrome"])
+
+                # Create context with CLEAN settings - NO ignore_https_errors
+                # Use synced User-Agent and browser's actual defaults for locale, timezone, viewport
                 context = await browser.new_context(
                     # REMOVED: ignore_https_errors=True  - TLS must be valid
-                    # REMOVED: hardcoded user_agent - use browser's real UA
+                    # Use synced User-Agent matching detected browser
+                    user_agent=detected_ua,
                     # REMOVED: hardcoded viewport - use browser's natural size
                     # REMOVED: device_scale_factor=2.0 - use default
                     # REMOVED: hardcoded locale - use browser default

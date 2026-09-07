@@ -1,0 +1,17 @@
+.env
+.env.local
+*.har
+tests/fixtures/*.har
+docs/evidence/*.har
+*.log
+__pycache__/
+*.pyc
+.pytest_cache/
+.coverage
+*.pem
+*.key
+*.crt
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

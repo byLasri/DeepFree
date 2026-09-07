@@ -33,9 +33,9 @@ def get_playwright_launch_config() -> dict:
     # This is required to pass Google's "insecure browser" check
     # Removed: --disable-web-security, --disable-gpu, --disable-features=IsolateOrigins,site-per-process
     # Removed: --no-sandbox, --disable-setuid-sandbox (not needed outside containers)
+    # Removed: --window-size - let browser use system default resolution
     base_args = [
         "--disable-blink-features=AutomationControlled",
-        "--window-size=1920,1080",
         "--disable-dev-shm-usage",
     ]
     
@@ -274,11 +274,11 @@ class LoginExtractor:
                 self.browser = browser
 
                 # Create context with CLEAN settings - NO ignore_https_errors, NO hardcoded UA
-                # Use browser's actual defaults for locale, timezone, UA
+                # Use browser's actual defaults for locale, timezone, UA, viewport
                 context = await browser.new_context(
                     # REMOVED: ignore_https_errors=True  - TLS must be valid
                     # REMOVED: hardcoded user_agent - use browser's real UA
-                    viewport={"width": 1920, "height": 1080},
+                    # REMOVED: hardcoded viewport - use browser's natural size
                     # REMOVED: device_scale_factor=2.0 - use default
                     # REMOVED: hardcoded locale - use browser default
                     # REMOVED: hardcoded timezone_id - use browser default

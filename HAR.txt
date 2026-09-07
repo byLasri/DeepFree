@@ -1,0 +1,874 @@
+{
+"log": {
+"version": "1.2",
+"creator": {
+"name": "Firefox",
+"version": "155.0.1"
+},
+"browser": {
+"name": "Firefox",
+"version": "155.0.1"
+},
+"pages": [
+{
+"id": "page\_1",
+"pageTimings": {
+"onContentLoad": -1,
+"onLoad": -1
+},
+"startedDateTime": "2026-09-06T18:57:59.122-07:00",
+"title": "[https://chat.deepseek.com/](https://chat.deepseek.com/)"
+}
+],
+"entries": [
+{
+"startedDateTime": "2026-09-06T18:57:59.122-07:00",
+"request": {
+"bodySize": 218,
+"method": "POST",
+"url": "[https://chat.deepseek.com/api/v0/chat/completion](https://chat.deepseek.com/api/v0/chat/completion)",
+"httpVersion": "HTTP/2",
+"headers": [
+{
+"name": "Host",
+"value": "chat.deepseek.com"
+},
+{
+"name": "User-Agent",
+"value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:155.0) Gecko/20100101 Firefox/155.0"
+},
+{
+"name": "Accept",
+"value": "*/*"
+},
+{
+"name": "Accept-Language",
+"value": "en-US,en;q=0.9"
+},
+{
+"name": "Accept-Encoding",
+"value": "gzip, deflate, br, zstd"
+},
+{
+"name": "x-ds-pow-response",
+"value": "eyJhbGdvcml0aG0iOiJEZWVwU2Vla0hhc2hWMSIsImNoYWxsZW5nZSI6IjAxOGM1ZDgwOTM4MmM2NzMwYzU5NmMwYWE3NTBjZDU4NGE0NTEzOWViOTJhNTNjMDJkNTdlZDI1N2NiZjY4ODIiLCJzYWx0IjoiYjk0NTU2NzZlYjdhNDRhMWZhNDciLCJhbnN3ZXIiOjExMzA2MCwic2lnbmF0dXJlIjoiZjIyOGE0MTUwYzZlM2RhNTA4ZGJmM2ViNWE4YWYzMzA2ZTQ5YTU3YWRiMjZjYzFiNTAyOTQyMWE0NGYyYjZlOSIsInRhcmdldF9wYXRoIjoiL2FwaS92MC9jaGF0L2NvbXBsZXRpb24ifQ=="
+},
+{
+"name": "x-hif-leim",
+"value": "BgH7I7g1cqigR+8XV+1y+xWQmuypjuhm2usNJqnK47xLG8T2NcJH7jU=.uxA+cpEf4ZqZK7FL"
+},
+{
+"name": "x-client-bundle-id",
+"value": "com.deepseek.chat"
+},
+{
+"name": "x-client-platform",
+"value": "web"
+},
+{
+"name": "x-client-version",
+"value": "2.4.0"
+},
+{
+"name": "x-client-locale",
+"value": "en\_US"
+},
+{
+"name": "x-client-timezone-offset",
+"value": "-25200"
+},
+{
+"name": "authorization",
+"value": "Bearer g/l8OuQEpbFFBJvBQBMuYYprWTqYe/23tdJqQUkUWhRrCdVxbiuZgE4MEgoUuRJG"
+},
+{
+"name": "content-type",
+"value": "application/json"
+},
+{
+"name": "Content-Length",
+"value": "218"
+},
+{
+"name": "Origin",
+"value": "[https://chat.deepseek.com](https://chat.deepseek.com)"
+},
+{
+"name": "Connection",
+"value": "keep-alive"
+},
+{
+"name": "Referer",
+"value": "[https://chat.deepseek.com/a/chat/s/e9e32496-ba9f-49cc-86d6-df5fcb92f550](https://chat.deepseek.com/a/chat/s/e9e32496-ba9f-49cc-86d6-df5fcb92f550)"
+},
+{
+"name": "Cookie",
+"value": ".thumbcache\_6b2e5483f9d858d7c661c5e276b6a6ae=; smidV2=20260829030333f6b52d0e39add809ec042d5edb211a520040e69784a0b5c80; ds\_session\_id=e81502f905904174a8548dd750e0153d"
+},
+{
+"name": "Sec-Fetch-Dest",
+"value": "empty"
+},
+{
+"name": "Sec-Fetch-Mode",
+"value": "cors"
+},
+{
+"name": "Sec-Fetch-Site",
+"value": "same-origin"
+},
+{
+"name": "Priority",
+"value": "u=0"
+},
+{
+"name": "TE",
+"value": "trailers"
+}
+],
+"cookies": [
+{
+"name": ".thumbcache\_6b2e5483f9d858d7c661c5e276b6a6ae",
+"value": ""
+},
+{
+"name": "smidV2",
+"value": "20260829030333f6b52d0e39add809ec042d5edb211a520040e69784a0b5c80"
+},
+{
+"name": "ds\_session\_id",
+"value": "e81502f905904174a8548dd750e0153d"
+}
+],
+"queryString": [],
+"headersSize": 1416,
+"postData": {
+"mimeType": "application/json",
+"params": [],
+"text": "{"chat\_session\_id":"e9e32496-ba9f-49cc-86d6-df5fcb92f550","parent\_message\_id":null,"model\_type":"expert","prompt":"say ok","ref\_file\_ids":[],"thinking\_enabled":true,"search\_enabled":false,"action":null,"preempt":false}"
+}
+},
+"response": {
+"status": 200,
+"statusText": "",
+"httpVersion": "HTTP/2",
+"headers": [
+{
+"name": "content-type",
+"value": "text/event-stream; charset=utf-8"
+},
+{
+"name": "date",
+"value": "Mon, 07 Sep 2026 01:57:58 GMT"
+},
+{
+"name": "x-content-type-options",
+"value": "nosniff"
+},
+{
+"name": "server",
+"value": "elb"
+},
+{
+"name": "cache-control",
+"value": "no-cache"
+},
+{
+"name": "x-ds-sse-heartbeat-timeout-secs",
+"value": "8"
+},
+{
+"name": "x-ds-trace-id",
+"value": "d42eec0a091683c608928c8c3838e892"
+},
+{
+"name": "strict-transport-security",
+"value": "max-age=31536000; includeSubDomains; preload"
+},
+{
+"name": "x-cache",
+"value": "Miss from cloudfront"
+},
+{
+"name": "via",
+"value": "1.1 e7e1370a0d67deaad1bd9c58422972fa.cloudfront.net (CloudFront)"
+},
+{
+"name": "x-amz-cf-pop",
+"value": "MAD53-P6"
+},
+{
+"name": "x-amz-cf-id",
+"value": "T276ztGRxZedyj6rcSnFEuA6WRyWyGimI0on6WJobzG3xtNdNJ7BHQ=="
+},
+{
+"name": "X-Firefox-Spdy",
+"value": "h2"
+}
+],
+"cookies": [],
+"content": {
+"mimeType": "text/event-stream; charset=utf-8",
+"size": 1547,
+"text": "event: ready\ndata: {"request\_message\_id":1,"response\_message\_id":2,"model\_type":"expert"}\n\nevent: update\_session\ndata: {"updated\_at":1788746279.247738}\n\ndata: {"v":{"response":{"message\_id":2,"parent\_id":1,"model":"","role":"ASSISTANT","thinking\_enabled":true,"ban\_edit":false,"ban\_regenerate":false,"status":"WIP","incomplete\_message":null,"accumulated\_token\_usage":0,"feedback":null,"inserted\_at":1788746279.238456,"search\_enabled":false,"fragments":[{"id":2,"type":"THINK","content":"We","elapsed\_secs":null,"references":[],"stage\_id":1}],"conversation\_mode":"DEFAULT","has\_pending\_fragment":false,"auto\_continue":false,"search\_triggered":false}}}\n\ndata: {"p":"response/fragments/-1/content","o":"APPEND","v":" need"}\n\ndata: {"v":" answer"}\n\ndata: {"v":" user"}\n\ndata: {"v":" says"}\n\ndata: {"v":" \\""}\n\ndata: {"v":"say"}\n\ndata: {"v":" ok"}\n\ndata: {"v":"\\"."}\n\ndata: {"v":" Need"}\n\ndata: {"v":" respond"}\n\ndata: {"v":" \\""}\n\ndata: {"v":"ok"}\n\ndata: {"v":"\\"."}\n\ndata: {"v":" Simple"}\n\ndata: {"v":"."}\n\ndata: {"p":"response/fragments/-1/elapsed\_secs","o":"SET","v":0.859048815}\n\ndata: {"p":"response/fragments","o":"APPEND","v":[{"id":3,"type":"RESPONSE","content":"ok","references":[],"stage\_id":1}]}\n\ndata: {"p":"response","o":"BATCH","v":[{"p":"accumulated\_token\_usage","v":36},{"p":"quasi\_status","v":"FINISHED"}]}\n\ndata: {"p":"response/status","o":"SET","v":"FINISHED"}\n\nevent: update\_session\ndata: {"updated\_at":1788746279.8374898}\n\nevent: title\ndata: {"content":"Say ok"}\n\nevent: close\ndata: {"click\_behavior":"none","auto\_resume":false}\n\n"
+},
+"redirectURL": "",
+"headersSize": 546,
+"bodySize": 2093
+},
+"cache": {},
+"timings": {
+"blocked": 0,
+"dns": 0,
+"connect": 0,
+"ssl": 0,
+"send": 0,
+"wait": 317,
+"receive": 0
+},
+"time": 317,
+"\_securityState": "secure",
+"\_priority": "Highest",
+"serverIPAddress": "3.173.21.63",
+"connection": "443",
+"pageref": "page\_1"
+},
+{
+"startedDateTime": "2026-09-06T18:57:59.149-07:00",
+"request": {
+"bodySize": 2,
+"method": "POST",
+"url": "[https://chat.deepseek.com/api/v0/chat\_session/create](https://chat.deepseek.com/api/v0/chat_session/create)",
+"httpVersion": "HTTP/2",
+"headers": [
+{
+"name": "Host",
+"value": "chat.deepseek.com"
+},
+{
+"name": "User-Agent",
+"value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:155.0) Gecko/20100101 Firefox/155.0"
+},
+{
+"name": "Accept",
+"value": "*/*"
+},
+{
+"name": "Accept-Language",
+"value": "en-US,en;q=0.9"
+},
+{
+"name": "Accept-Encoding",
+"value": "gzip, deflate, br, zstd"
+},
+{
+"name": "x-client-bundle-id",
+"value": "com.deepseek.chat"
+},
+{
+"name": "x-client-platform",
+"value": "web"
+},
+{
+"name": "x-client-version",
+"value": "2.4.0"
+},
+{
+"name": "x-client-locale",
+"value": "en\_US"
+},
+{
+"name": "x-client-timezone-offset",
+"value": "-25200"
+},
+{
+"name": "authorization",
+"value": "Bearer g/l8OuQEpbFFBJvBQBMuYYprWTqYe/23tdJqQUkUWhRrCdVxbiuZgE4MEgoUuRJG"
+},
+{
+"name": "content-type",
+"value": "application/json"
+},
+{
+"name": "Content-Length",
+"value": "2"
+},
+{
+"name": "Origin",
+"value": "[https://chat.deepseek.com](https://chat.deepseek.com)"
+},
+{
+"name": "Connection",
+"value": "keep-alive"
+},
+{
+"name": "Referer",
+"value": "[https://chat.deepseek.com/a/chat/s/e9e32496-ba9f-49cc-86d6-df5fcb92f550](https://chat.deepseek.com/a/chat/s/e9e32496-ba9f-49cc-86d6-df5fcb92f550)"
+},
+{
+"name": "Cookie",
+"value": ".thumbcache\_6b2e5483f9d858d7c661c5e276b6a6ae=; smidV2=20260829030333f6b52d0e39add809ec042d5edb211a520040e69784a0b5c80; ds\_session\_id=e81502f905904174a8548dd750e0153d"
+},
+{
+"name": "Sec-Fetch-Dest",
+"value": "empty"
+},
+{
+"name": "Sec-Fetch-Mode",
+"value": "cors"
+},
+{
+"name": "Sec-Fetch-Site",
+"value": "same-origin"
+},
+{
+"name": "TE",
+"value": "trailers"
+}
+],
+"cookies": [
+{
+"name": ".thumbcache\_6b2e5483f9d858d7c661c5e276b6a6ae",
+"value": ""
+},
+{
+"name": "smidV2",
+"value": "20260829030333f6b52d0e39add809ec042d5edb211a520040e69784a0b5c80"
+},
+{
+"name": "ds\_session\_id",
+"value": "e81502f905904174a8548dd750e0153d"
+}
+],
+"queryString": [],
+"headersSize": 927,
+"postData": {
+"mimeType": "application/json",
+"params": [],
+"text": "{}"
+}
+},
+"response": {
+"status": 200,
+"statusText": "",
+"httpVersion": "HTTP/2",
+"headers": [
+{
+"name": "content-type",
+"value": "application/json"
+},
+{
+"name": "content-length",
+"value": "348"
+},
+{
+"name": "date",
+"value": "Mon, 07 Sep 2026 01:57:58 GMT"
+},
+{
+"name": "server",
+"value": "elb"
+},
+{
+"name": "access-control-allow-credentials",
+"value": "true"
+},
+{
+"name": "x-ds-served-by",
+"value": "chat"
+},
+{
+"name": "x-ds-trace-id",
+"value": "54063b1abfc9daaa672b914b1171b74a"
+},
+{
+"name": "strict-transport-security",
+"value": "max-age=31536000; includeSubDomains; preload"
+},
+{
+"name": "x-content-type-options",
+"value": "nosniff"
+},
+{
+"name": "x-cache",
+"value": "Miss from cloudfront"
+},
+{
+"name": "via",
+"value": "1.1 e7e1370a0d67deaad1bd9c58422972fa.cloudfront.net (CloudFront)"
+},
+{
+"name": "x-amz-cf-pop",
+"value": "MAD53-P6"
+},
+{
+"name": "x-amz-cf-id",
+"value": "MNUTsy37ep6EhUt-ZVk0i88eq4MaKx3hsyfsMZxNX62xyn-da95fvA=="
+},
+{
+"name": "X-Firefox-Spdy",
+"value": "h2"
+}
+],
+"cookies": [],
+"content": {
+"mimeType": "application/json",
+"size": 348,
+"text": "{"code":0,"msg":"","data":{"biz\_code":0,"biz\_msg":"","biz\_data":{"chat\_session":{"id":"b814b597-262a-4c03-8fce-05387687b721","seq\_id":210909478,"agent":"chat","model\_type":"default","title":null,"title\_type":"WIP","version":0,"current\_message\_id":null,"pinned":false,"inserted\_at":1788746278.749,"updated\_at":1788746278.749},"ttl\_seconds":259200}}}"
+},
+"redirectURL": "",
+"headersSize": 552,
+"bodySize": 900
+},
+"cache": {},
+"timings": {
+"blocked": 0,
+"dns": 0,
+"connect": 0,
+"ssl": 0,
+"send": 0,
+"wait": 340,
+"receive": 0
+},
+"time": 340,
+"\_securityState": "secure",
+"\_priority": "Normal",
+"serverIPAddress": "3.173.21.63",
+"connection": "443",
+"pageref": "page\_1"
+},
+{
+"startedDateTime": "2026-09-06T18:57:59.189-07:00",
+"request": {
+"bodySize": 0,
+"method": "POST",
+"url": "[https://gator.volces.com/list](https://gator.volces.com/list)",
+"httpVersion": "",
+"headers": [
+{
+"name": "Host",
+"value": "gator.volces.com"
+},
+{
+"name": "User-Agent",
+"value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:155.0) Gecko/20100101 Firefox/155.0"
+},
+{
+"name": "Accept",
+"value": "*/*"
+},
+{
+"name": "Accept-Language",
+"value": "en-US,en;q=0.9"
+},
+{
+"name": "Accept-Encoding",
+"value": "gzip, deflate, br, zstd"
+},
+{
+"name": "Content-Type",
+"value": "application/json; charset=utf-8"
+},
+{
+"name": "Content-Length",
+"value": "9750"
+},
+{
+"name": "Origin",
+"value": "[https://chat.deepseek.com](https://chat.deepseek.com)"
+},
+{
+"name": "Connection",
+"value": "keep-alive"
+},
+{
+"name": "Referer",
+"value": "[https://chat.deepseek.com/](https://chat.deepseek.com/)"
+}
+],
+"cookies": [],
+"queryString": [],
+"headersSize": 0
+},
+"response": {
+"status": 0,
+"statusText": "",
+"httpVersion": "",
+"headers": [],
+"cookies": [],
+"content": {
+"text": ""
+},
+"redirectURL": "",
+"headersSize": 0,
+"bodySize": -1
+},
+"cache": {},
+"timings": {},
+"time": 0,
+"\_priority": "Normal",
+"pageref": "page\_1"
+},
+{
+"startedDateTime": "2026-09-06T18:57:59.480-07:00",
+"request": {
+"bodySize": 0,
+"method": "POST",
+"url": "[https://gator.volces.com/list](https://gator.volces.com/list)",
+"httpVersion": "",
+"headers": [
+{
+"name": "Host",
+"value": "gator.volces.com"
+},
+{
+"name": "User-Agent",
+"value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:155.0) Gecko/20100101 Firefox/155.0"
+},
+{
+"name": "Accept",
+"value": "*/*"
+},
+{
+"name": "Accept-Language",
+"value": "en-US,en;q=0.9"
+},
+{
+"name": "Accept-Encoding",
+"value": "gzip, deflate, br, zstd"
+},
+{
+"name": "Content-Type",
+"value": "application/json; charset=utf-8"
+},
+{
+"name": "Content-Length",
+"value": "2196"
+},
+{
+"name": "Origin",
+"value": "[https://chat.deepseek.com](https://chat.deepseek.com)"
+},
+{
+"name": "Connection",
+"value": "keep-alive"
+},
+{
+"name": "Referer",
+"value": "[https://chat.deepseek.com/](https://chat.deepseek.com/)"
+}
+],
+"cookies": [],
+"queryString": [],
+"headersSize": 0
+},
+"response": {
+"status": 0,
+"statusText": "",
+"httpVersion": "",
+"headers": [],
+"cookies": [],
+"content": {
+"text": ""
+},
+"redirectURL": "",
+"headersSize": 0,
+"bodySize": -1
+},
+"cache": {},
+"timings": {},
+"time": 0,
+"\_priority": "Normal",
+"pageref": "page\_1"
+},
+{
+"startedDateTime": "2026-09-06T18:57:59.529-07:00",
+"request": {
+"bodySize": 0,
+"method": "POST",
+"url": "[https://gator.volces.com/list](https://gator.volces.com/list)",
+"httpVersion": "",
+"headers": [
+{
+"name": "Host",
+"value": "gator.volces.com"
+},
+{
+"name": "User-Agent",
+"value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:155.0) Gecko/20100101 Firefox/155.0"
+},
+{
+"name": "Accept",
+"value": "*/*"
+},
+{
+"name": "Accept-Language",
+"value": "en-US,en;q=0.9"
+},
+{
+"name": "Accept-Encoding",
+"value": "gzip, deflate, br, zstd"
+},
+{
+"name": "Content-Type",
+"value": "application/json; charset=utf-8"
+},
+{
+"name": "Content-Length",
+"value": "1376"
+},
+{
+"name": "Origin",
+"value": "[https://chat.deepseek.com](https://chat.deepseek.com)"
+},
+{
+"name": "Connection",
+"value": "keep-alive"
+},
+{
+"name": "Referer",
+"value": "[https://chat.deepseek.com/](https://chat.deepseek.com/)"
+}
+],
+"cookies": [],
+"queryString": [],
+"headersSize": 0
+},
+"response": {
+"status": 0,
+"statusText": "",
+"httpVersion": "",
+"headers": [],
+"cookies": [],
+"content": {
+"text": ""
+},
+"redirectURL": "",
+"headersSize": 0,
+"bodySize": -1
+},
+"cache": {},
+"timings": {},
+"time": 0,
+"\_priority": "Normal",
+"pageref": "page\_1"
+},
+{
+"startedDateTime": "2026-09-06T18:58:00.137-07:00",
+"request": {
+"bodySize": 0,
+"method": "POST",
+"url": "[https://gator.volces.com/list](https://gator.volces.com/list)",
+"httpVersion": "",
+"headers": [
+{
+"name": "Host",
+"value": "gator.volces.com"
+},
+{
+"name": "User-Agent",
+"value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:155.0) Gecko/20100101 Firefox/155.0"
+},
+{
+"name": "Accept",
+"value": "*/*"
+},
+{
+"name": "Accept-Language",
+"value": "en-US,en;q=0.9"
+},
+{
+"name": "Accept-Encoding",
+"value": "gzip, deflate, br, zstd"
+},
+{
+"name": "Content-Type",
+"value": "application/json; charset=utf-8"
+},
+{
+"name": "Content-Length",
+"value": "1939"
+},
+{
+"name": "Origin",
+"value": "[https://chat.deepseek.com](https://chat.deepseek.com)"
+},
+{
+"name": "Connection",
+"value": "keep-alive"
+},
+{
+"name": "Referer",
+"value": "[https://chat.deepseek.com/](https://chat.deepseek.com/)"
+}
+],
+"cookies": [],
+"queryString": [],
+"headersSize": 0
+},
+"response": {
+"status": 0,
+"statusText": "",
+"httpVersion": "",
+"headers": [],
+"cookies": [],
+"content": {
+"text": ""
+},
+"redirectURL": "",
+"headersSize": 0,
+"bodySize": -1
+},
+"cache": {},
+"timings": {},
+"time": 0,
+"\_priority": "Normal",
+"pageref": "page\_1"
+},
+{
+"startedDateTime": "2026-09-06T18:58:00.636-07:00",
+"request": {
+"bodySize": 0,
+"method": "POST",
+"url": "[https://gator.volces.com/list](https://gator.volces.com/list)",
+"httpVersion": "",
+"headers": [
+{
+"name": "Host",
+"value": "gator.volces.com"
+},
+{
+"name": "User-Agent",
+"value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:155.0) Gecko/20100101 Firefox/155.0"
+},
+{
+"name": "Accept",
+"value": "*/*"
+},
+{
+"name": "Accept-Language",
+"value": "en-US,en;q=0.9"
+},
+{
+"name": "Accept-Encoding",
+"value": "gzip, deflate, br, zstd"
+},
+{
+"name": "Content-Type",
+"value": "application/json; charset=utf-8"
+},
+{
+"name": "Content-Length",
+"value": "3696"
+},
+{
+"name": "Origin",
+"value": "[https://chat.deepseek.com](https://chat.deepseek.com)"
+},
+{
+"name": "Connection",
+"value": "keep-alive"
+},
+{
+"name": "Referer",
+"value": "[https://chat.deepseek.com/](https://chat.deepseek.com/)"
+}
+],
+"cookies": [],
+"queryString": [],
+"headersSize": 0
+},
+"response": {
+"status": 0,
+"statusText": "",
+"httpVersion": "",
+"headers": [],
+"cookies": [],
+"content": {
+"text": ""
+},
+"redirectURL": "",
+"headersSize": 0,
+"bodySize": -1
+},
+"cache": {},
+"timings": {},
+"time": 0,
+"\_priority": "Normal",
+"pageref": "page\_1"
+},
+{
+"startedDateTime": "2026-09-06T18:58:22.320-07:00",
+"request": {
+"bodySize": 0,
+"method": "POST",
+"url": "[https://gator.volces.com/list](https://gator.volces.com/list)",
+"httpVersion": "",
+"headers": [
+{
+"name": "Host",
+"value": "gator.volces.com"
+},
+{
+"name": "User-Agent",
+"value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:155.0) Gecko/20100101 Firefox/155.0"
+},
+{
+"name": "Accept",
+"value": "*/*"
+},
+{
+"name": "Accept-Language",
+"value": "en-US,en;q=0.9"
+},
+{
+"name": "Accept-Encoding",
+"value": "gzip, deflate, br, zstd"
+},
+{
+"name": "Content-Type",
+"value": "application/json; charset=utf-8"
+},
+{
+"name": "Content-Length",
+"value": "1160"
+},
+{
+"name": "Origin",
+"value": "[https://chat.deepseek.com](https://chat.deepseek.com)"
+},
+{
+"name": "Connection",
+"value": "keep-alive"
+},
+{
+"name": "Referer",
+"value": "[https://chat.deepseek.com/](https://chat.deepseek.com/)"
+}
+],
+"cookies": [],
+"queryString": [],
+"headersSize": 0
+},
+"response": {
+"status": 0,
+"statusText": "",
+"httpVersion": "",
+"headers": [],
+"cookies": [],
+"content": {
+"text": ""
+},
+"redirectURL": "",
+"headersSize": 0,
+"bodySize": -1
+},
+"cache": {},
+"timings": {},
+"time": 0,
+"\_priority": "Normal",
+"pageref": "page\_1"
+}
+]
+}
+}

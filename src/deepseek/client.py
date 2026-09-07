@@ -1,44 +1,34 @@
 import time
 import json
 import requests
-from typing import Optional, Generator
+from typing import Optional, List
 from dataclasses import dataclass
 
-from ..config import DeepSeekConfig
+from ..session import DeepSeekSession, DynamicHeaders, StaticDynamicHeaderProvider, DynamicHeaderProvider
 from ..protocol.sse_parser import parse_sse_stream, normalize_events, reconstruct_response, extract_message_ids
-from ..protocol.normalized_events import ProtocolRequest, ProtocolResponse, SessionState
+from ..protocol.normalized_events import ProtocolRequest, ProtocolResponse
 from ..recorder.recorder import Recorder
 
 
 @dataclass
 class CompletionResult:
     response: ProtocolResponse
-    session_state: SessionState
+    session: DeepSeekSession
     raw_sse: str
+    dynamic_headers_used: DynamicHeaders
 
 
 class DeepSeekClient:
-    def __init__(self, config: DeepSeekConfig, recorder: Optional[Recorder] = None):
-        self.config = config
+    def __init__(
+        self,
+        session: DeepSeekSession,
+        recorder: Optional[Recorder] = None,
+        dynamic_provider: Optional[DynamicHeaderProvider] = None,
+    ):
+        self.session = session
         self.recorder = recorder
-        self.session = requests.Session()
-        self.session_state = SessionState(chat_session_id=config.chat_session_id)
-        self.session_state.authorization = config.authorization
-        if config.cookie:
-            self._parse_cookies(config.cookie)
-
-    def _parse_cookies(self, cookie_str: str):
-        for part in cookie_str.split(";"):
-            part = part.strip()
-            if "=" in part:
-                k, v = part.split("=", 1)
-                self.session_state.cookies[k.strip()] = v.strip()
-
-    def _get_headers(self, include_dynamic: bool = True) -> dict:
-        return self.config.get_headers(include_dynamic)
-
-    def _get_redacted_headers(self, include_dynamic: bool = True) -> dict:
-        return self.config.get_redacted_headers(include_dynamic)
+        self.dynamic_provider = dynamic_provider or session.dynamic_header_provider or StaticDynamicHeaderProvider()
+        self.http_session = requests.Session()
 
     def send_completion(
         self,
@@ -51,10 +41,10 @@ class DeepSeekClient:
         preempt: bool = False,
         record: bool = True,
     ) -> CompletionResult:
-        url = f"{self.config.base_url}/api/v0/chat/completion"
+        url = f"https://chat.deepseek.com/api/v0/chat/completion"
 
         request = ProtocolRequest(
-            chat_session_id=self.config.chat_session_id,
+            chat_session_id=self.session.chat.chat_session_id,
             parent_message_id=parent_message_id,
             model_type=model_type,
             prompt=prompt,
@@ -64,13 +54,16 @@ class DeepSeekClient:
             preempt=preempt,
         )
 
-        headers = self._get_headers()
-        redacted_headers = self._get_redacted_headers()
+        # Generate dynamic headers for this request
+        dynamic = self.dynamic_provider.generate_headers(self.session, request.to_dict())
+
+        headers = self.session.get_request_headers(dynamic)
+        redacted_headers = self.session.get_redacted_headers(dynamic)
         body = request.to_dict()
 
         req_start = time.perf_counter()
         try:
-            response = self.session.post(
+            response = self.http_session.post(
                 url,
                 headers=headers,
                 json=body,
@@ -132,7 +125,8 @@ class DeepSeekClient:
             if event.elapsed_secs:
                 protocol_response.elapsed_secs = event.elapsed_secs
 
-        self.session_state.add_turn(request, protocol_response)
+        # Update chat session state
+        self.session.chat.add_turn(request, protocol_response)
 
         if record and self.recorder:
             self.recorder.record(
@@ -159,11 +153,12 @@ class DeepSeekClient:
 
         return CompletionResult(
             response=protocol_response,
-            session_state=self.session_state,
+            session=self.session,
             raw_sse=raw_sse,
+            dynamic_headers_used=dynamic,
         )
 
-    def send_multi_turn(self, prompts: list[str], model_type: str = "expert") -> list[CompletionResult]:
+    def send_multi_turn(self, prompts: List[str], model_type: str = "expert") -> List[CompletionResult]:
         results = []
         parent_id = None
         for i, prompt in enumerate(prompts):
@@ -176,9 +171,46 @@ class DeepSeekClient:
             parent_id = result.response.response_message_id
         return results
 
+    def create_chat_session(self) -> str:
+        """Create a new chat session via the API."""
+        url = "https://chat.deepseek.com/api/v0/chat_session/create"
+        dynamic = self.dynamic_provider.generate_headers(self.session, {})
+        headers = self.session.get_request_headers(dynamic)
+        redacted_headers = self.session.get_redacted_headers(dynamic)
+
+        req_start = time.perf_counter()
+        try:
+            response = self.http_session.post(
+                url,
+                headers=headers,
+                json={},
+                timeout=30,
+            )
+        except requests.RequestException as e:
+            raise RuntimeError(f"Session creation failed: {e}") from e
+
+        req_timing = (time.perf_counter() - req_start) * 1000
+
+        if response.status_code != 200:
+            error_body = response.text[:500] if response.text else ""
+            raise RuntimeError(f"HTTP {response.status_code}: {error_body}")
+
+        data = response.json()
+        if data.get("code") == 0:
+            chat_data = data.get("data", {}).get("biz_data", {}).get("chat_session", {})
+            new_session_id = chat_data.get("id")
+            if new_session_id:
+                self.session.chat.chat_session_id = new_session_id
+                self.session.chat.current_parent_message_id = None
+                self.session.chat.message_counter = 0
+                return new_session_id
+
+        raise RuntimeError(f"Failed to create session: {data}")
+
 
 def create_client_from_env(recorder: Optional[Recorder] = None) -> DeepSeekClient:
-    config = DeepSeekConfig.from_env()
-    if not config.is_configured():
+    from ..session import create_session_from_env
+    session = create_session_from_env()
+    if not session.auth.is_valid() or not session.chat.chat_session_id:
         raise ValueError("DeepSeek credentials not configured. Set DEEPSEEK_AUTHORIZATION and DEEPSEEK_CHAT_SESSION_ID")
-    return DeepSeekClient(config, recorder)
+    return DeepSeekClient(session, recorder)

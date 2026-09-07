@@ -2,7 +2,7 @@ import requests
 import json
 from typing import Optional
 from dataclasses import dataclass
-from ..config import DeepSeekConfig
+from ..session import AuthState
 from ..recorder.recorder import Recorder
 
 
@@ -39,7 +39,7 @@ KNOWN_ENDPOINTS = {
     ),
     "create_session": EndpointInfo(
         method="POST",
-        url="/api/v0/chat/session",
+        url="/api/v0/chat_session/create",
         purpose="Create new chat session",
         required_inputs=[],
         important_headers=["authorization", "Cookie"],
@@ -77,18 +77,15 @@ KNOWN_ENDPOINTS = {
 
 
 class AuthInvestigator:
-    def __init__(self, config: DeepSeekConfig, recorder: Optional[Recorder] = None):
-        self.config = config
+    def __init__(self, auth: AuthState, recorder: Optional[Recorder] = None):
+        self.auth = auth
         self.recorder = recorder
         self.session = requests.Session()
-        if config.cookie:
-            self._set_cookies(config.cookie)
+        self._set_cookies_from_auth()
 
-    def _set_cookies(self, cookie_str: str):
-        for part in cookie_str.split(";"):
-            part = part.strip()
-            if "=" in part:
-                k, v = part.split("=", 1)
+    def _set_cookies_from_auth(self):
+        for k, v in self.auth.cookies.items():
+            if v:
                 self.session.cookies.set(k.strip(), v.strip(), domain="chat.deepseek.com")
 
     def _get_base_headers(self) -> dict:
@@ -98,7 +95,7 @@ class AuthInvestigator:
             "Content-Type": "application/json",
             "Origin": "https://chat.deepseek.com",
             "Referer": "https://chat.deepseek.com/",
-            "User-Agent": self.config.user_agent,
+            "User-Agent": self.auth.user_agent or "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:155.0) Gecko/20100101 Firefox/155.0",
             "x-client-bundle-id": "com.deepseek.chat",
             "x-client-locale": "en_US",
             "x-client-platform": "web",
@@ -110,10 +107,10 @@ class AuthInvestigator:
         if not endpoint:
             return {"error": f"Unknown endpoint: {endpoint_key}"}
 
-        url = f"{self.config.base_url}{endpoint.url}"
+        url = f"https://chat.deepseek.com{endpoint.url}"
         headers = self._get_base_headers()
-        if self.config.authorization:
-            headers["authorization"] = f"Bearer {self.config.authorization}"
+        if self.auth.authorization:
+            headers["Authorization"] = f"Bearer {self.auth.authorization}"
 
         try:
             if endpoint.method == "GET":
@@ -168,7 +165,6 @@ class AuthInvestigator:
             "body_differences": [],
         }
 
-        first_req = completion_entries[0]["request"]
         headers_list = [e["request"]["headers"] for e in completion_entries]
 
         all_header_names = set()

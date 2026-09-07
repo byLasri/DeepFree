@@ -71,16 +71,22 @@ class InternalEvent:
 
 **Responsibilities:**
 - Translate Internal → DeepSeek request format
-- Manage DeepSeek session lifecycle
+- Manage DeepSeek session lifecycle (create session via `/api/v0/chat_session/create`)
 - Handle authentication (cookies, tokens, PoW)
 - Parse DeepSeek SSE → Internal events
 - Handle errors / retries
 
 **Key Challenges:**
 - Dynamic headers (`x-ds-pow-response`, `x-hif-leim`)
-- Session initialization
+- Session initialization (requires `chat_session_id` from session creation endpoint)
 - Message ID chaining
 - No native tool calling support
+- PoW generation (`DeepSeekHashV1` algorithm, likely WASM)
+- Fingerprint header (`x-hif-leim`) generation
+
+**Discovered Endpoints:**
+- `POST /api/v0/chat/completion` - Main completion (SSE)
+- `POST /api/v0/chat_session/create` - Create new chat session
 
 **Request Translation:**
 ```python

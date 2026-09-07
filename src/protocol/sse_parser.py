@@ -59,52 +59,56 @@ class NormalizedEvent:
 def parse_sse_stream(raw_stream: str) -> list[SSEEvent]:
     events = []
     lines = raw_stream.split("\n")
-    current_event = {}
-    current_data = []
+    current_event_name = None
+    current_event_id = None
+    current_event_retry = None
 
     for line in lines:
         line = line.rstrip("\r")
         if not line:
-            if current_data or "event" in current_event:
-                event = _build_event(current_event, "\n".join(current_data))
-                if event:
-                    events.append(event)
-                current_event = {}
-                current_data = []
             continue
 
         if line.startswith(":"):
             continue
 
         if line.startswith("event:"):
-            current_event["event"] = line[6:].strip()
+            current_event_name = line[6:].strip()
         elif line.startswith("id:"):
-            current_event["id"] = line[3:].strip()
+            current_event_id = line[3:].strip()
         elif line.startswith("retry:"):
             try:
-                current_event["retry"] = int(line[6:].strip())
+                current_event_retry = int(line[6:].strip())
             except ValueError:
                 pass
         elif line.startswith("data:"):
-            current_data.append(line[5:].lstrip())
+            data_str = line[5:].lstrip()
+            event = _build_event(
+                event_name=current_event_name,
+                data_str=data_str,
+                event_id=current_event_id,
+                retry=current_event_retry,
+            )
+            if event:
+                events.append(event)
+            current_event_name = None
+            current_event_id = None
+            current_event_retry = None
         else:
             if ":" in line:
                 key, value = line.split(":", 1)
-                current_event[key.strip()] = value.strip()
-
-    if current_data or "event" in current_event:
-        event = _build_event(current_event, "\n".join(current_data))
-        if event:
-            events.append(event)
 
     return events
 
 
-def _build_event(event_dict: dict, data_str: str) -> Optional[SSEEvent]:
-    if not data_str and "event" not in event_dict:
+def _build_event(
+    event_name: Optional[str],
+    data_str: str,
+    event_id: Optional[str] = None,
+    retry: Optional[int] = None,
+) -> Optional[SSEEvent]:
+    if not data_str and not event_name:
         return None
 
-    event_name = event_dict.get("event")
     try:
         data = json.loads(data_str) if data_str else {}
     except json.JSONDecodeError:
@@ -123,8 +127,8 @@ def _build_event(event_dict: dict, data_str: str) -> Optional[SSEEvent]:
         data=data,
         raw_data=data_str,
         event_name=event_name,
-        id=event_dict.get("id"),
-        retry=event_dict.get("retry"),
+        id=event_id,
+        retry=retry,
     )
 
 
@@ -174,6 +178,8 @@ def _normalize_single_event(event: SSEEvent) -> NormalizedEvent:
                         PathUpdate(path=path, operation=op, value=value, raw_event=event)
                     )
                     _extract_content_from_path(norm, path, value)
+                elif isinstance(value, str) and op_str is None and path is None:
+                    norm.content_fragments.append(value)
 
             if "response" in event.data:
                 resp = event.data["response"]

@@ -1,4 +1,4 @@
-# Dynamic Headers Analysis (Updated with did.txt findings)
+# Dynamic Headers Analysis (Updated with did.txt findings and WASM analysis)
 
 ## Complete Dynamic Header Generation Flow
 
@@ -77,6 +77,8 @@ The browser performs this sequence before each completion request:
 
 **Key Insight:** Challenge is **per-request**, expires in **5 minutes**. Must fetch fresh challenge for each completion.
 
+**Experimental Verification:** The challenge endpoint works **without authentication** (tested with/without auth and cookies).
+
 ---
 
 ## hif-leim Endpoint
@@ -106,6 +108,8 @@ The browser performs this sequence before each completion request:
 
 **TTL:** 10 minutes (600 seconds) - longer than PoW challenge.
 
+**Experimental Verification:** The hif-leim endpoint works **without authentication** (tested with/without auth and cookies).
+
 ---
 
 ## hif-dliq Endpoint
@@ -118,16 +122,59 @@ The browser performs this sequence before each completion request:
 
 ---
 
-## WASM Module
+## WASM Module Analysis (Critical Finding)
 
 **URL:** `https://fe-static.deepseek.com/chat/static/sha3_wasm_bg.7b9ca65ddd.wasm`
 
-**Purpose:** Implements `DeepSeekHashV1` PoW algorithm in WebAssembly.
+**Module Properties:**
+- Size: 26,612 bytes
+- No start function
+- **Zero imports** (fully self-contained)
+- **Data section present**: 3,964 bytes (contains SHA3 constants/round constants)
+- Memory: 17 pages (1,114,112 bytes)
+- **No start function**
 
-**Likely exports:**
-- Hash function (SHA3-256 or custom)
-- PoW solver (finds nonce where hash < target)
-- Signature verification
+**Exported Functions:**
+| Function | Signature | Purpose |
+|----------|-----------|---------|
+| `memory` | 17 pages (1,114,112 bytes) | Linear memory |
+| `wasm_deepseek_hash_v1` | `(i32, i32, i32) → []` | Hash: `(input_ptr, input_len, output_ptr)` |
+| `wasm_solve` | `(i32, i32, i32, i32, i32, f64) → []` | PoW solver |
+| `__wbindgen_add_to_stack_pointer` | `(i32) → i32` | Stack setup |
+| `__wbindgen_export_0` | `(i32, i32) → i32` | `malloc(size, align) → ptr` |
+| `__wbindgen_export_1` | `(i32, i32, i32, i32) → i32` | `realloc(ptr, old_size, new_size, align)` |
+| `__wbindgen_export_2` | `(i32, i32, i32) → []` | `free(ptr, size, align)` |
+| `__wbindgen_add_to_stack_pointer` | `(i32) → i32` | Stack setup |
+
+**Critical Experimental Finding:** **The WASM module cannot be executed outside a browser.**
+
+### Experimental Verification
+
+| Test | Result |
+|------|--------|
+| `wasm_solve` with all parameter orders | **FAIL** - `unreachable` trap |
+| `wasm_deepseek_hash_v1` | **FAIL** - `unreachable` trap |
+| Allocator functions (`__wbindgen_export_0/1/2`) | **WORK** |
+| Stack pointer setup | **WORK** |
+| Memory allocation (malloc/free/realloc) | **WORK** |
+
+**Root Cause:** The WASM module uses `wasm_bindgen` which generates JavaScript glue code for:
+1. String encoding/decoding (length-prefixed UTF-16/UTF-8 strings)
+2. Memory layout initialization
+2. Heap/stack management
+3. String/object serialization
+
+The WASM functions expect **wasm_bindgen string format** (length-prefixed UTF-16/UTF-8 strings with JavaScript object wrappers) and specific memory layout initialization that the JavaScript glue code provides. The JavaScript glue code is **not exported** and is part of the DeepSeek frontend bundles.
+
+**Experimental Conclusion:** **Non-browser PoW execution has NOT been achieved.** The WASM module requires the browser's JavaScript glue code (wasm_bindgen generated) to execute correctly. The allocator and stack setup work, but the core PoW functions hit `unreachable` traps when called directly.
+
+### WASM Module Properties (Verified)
+- **Size**: 26,612 bytes
+- **Start function**: None
+- **Imports**: 0 (fully self-contained)
+- **Data section**: 3,964 bytes (SHA3 constants/round constants)
+- **Memory**: 17 pages (1,114,112 bytes)
+- **No start function**
 
 ---
 
@@ -191,6 +238,6 @@ async def generate_dynamic_headers(session, payload):
 
 - Challenge `signature` binds challenge+salt - prevents replay
 - Difficulty `144000` = ~144k iterations target
-- WASM execution in browser = legitimate automation path
+- **PoW computation requires browser context** (wasm_bindgen glue code)
 - **No API to bypass WASM** - must execute in browser context
 - `did` (device ID) likely ties to `smidV2` cookie

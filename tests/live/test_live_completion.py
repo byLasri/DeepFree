@@ -28,7 +28,7 @@ def test_live_multi_turn():
     """Test multi-turn conversation."""
     session = create_session_from_env()
     assert session.auth.is_valid()
-    assert session.chat.chat_chat_session_id
+    assert session.chat.chat_session_id
 
     client = DeepSeekClient(session)
     prompts = [
